@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"math/rand"
 	"strings"
 	"sync"
 	"time"
@@ -70,6 +71,7 @@ func (t *tail) start(stackName string) {
 		latestEvent := resp.StackEvents[0]
 
 		for {
+			time.Sleep(2*time.Second + time.Duration(rand.Float64()*float64(time.Second)))
 			events := make([]cloudformation.StackEvent, 0, 10)
 			req := t.cfn.DescribeStackEventsRequest(&cloudformation.DescribeStackEventsInput{
 				StackName: aws.String(stackName),
@@ -117,7 +119,6 @@ func (t *tail) start(stackName string) {
 					}
 				}
 			}
-			time.Sleep(time.Second)
 		}
 	}()
 }
