@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"math/rand"
+	"strings"
 	"sync"
 	"time"
 
@@ -41,6 +42,19 @@ func (t *tail) Start(stackName string) {
 }
 
 func (t *tail) start(stackName string) {
+	// canonical stack names to ARN
+	if !strings.HasPrefix(stackName, "arn:") {
+		req := t.cfn.DescribeStacksRequest(&cloudformation.DescribeStacksInput{
+			StackName: aws.String(stackName),
+		})
+		resp, err := req.Send()
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		stackName = aws.StringValue(resp.Stacks[0].StackId)
+	}
+
 	t.mu.Lock()
 	if _, ok := t.stacks[stackName]; ok {
 		// already tailing, skip.
