@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"time"
 
@@ -19,7 +20,7 @@ func main() {
 	}
 
 	t := newTail(cfg)
-	t.Start("main-stack")
+	t.Start(os.Args[1])
 	for e := range t.Events() {
 		fmt.Println(formatEvent(e))
 	}
