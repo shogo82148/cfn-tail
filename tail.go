@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,12 +15,16 @@ type tail struct {
 	cfn cloudformationiface.CloudFormationAPI
 	ch  chan cloudformation.StackEvent
 	wg  sync.WaitGroup
+
+	mu     sync.RWMutex
+	stacks map[string]struct{}
 }
 
 func newTail(cfg aws.Config) *tail {
 	return &tail{
-		cfn: cloudformation.New(cfg),
-		ch:  make(chan cloudformation.StackEvent, 8),
+		cfn:    cloudformation.New(cfg),
+		ch:     make(chan cloudformation.StackEvent, 8),
+		stacks: make(map[string]struct{}),
 	}
 }
 
@@ -36,9 +41,23 @@ func (t *tail) Start(stackName string) {
 }
 
 func (t *tail) start(stackName string) {
+	t.mu.Lock()
+	if _, ok := t.stacks[stackName]; ok {
+		// already tailing, skip.
+		t.mu.Unlock()
+		return
+	}
+	t.stacks[stackName] = struct{}{}
+	t.mu.Unlock()
+
 	t.wg.Add(1)
 	go func() {
-		defer t.wg.Done()
+		defer func() {
+			t.mu.Lock()
+			delete(t.stacks, stackName)
+			t.mu.Unlock()
+			t.wg.Done()
+		}()
 
 		req := t.cfn.DescribeStackEventsRequest(&cloudformation.DescribeStackEventsInput{
 			StackName: aws.String(stackName),
@@ -64,6 +83,18 @@ func (t *tail) start(stackName string) {
 						break PAGENATE
 					}
 					events = append(events, e)
+
+					if aws.StringValue(e.ResourceType) == "AWS::CloudFormation::Stack" && e.ResourceStatus == "UPDATE_IN_PROGRESS" {
+						// follow nested stack
+						name := aws.StringValue(e.PhysicalResourceId)
+						if idx := strings.LastIndexByte(name, ':'); idx >= 0 {
+							name = strings.TrimPrefix(name[idx:], ":stack/")
+						}
+						if idx := strings.LastIndexByte(name, '/'); idx >= 0 {
+							name = name[:idx]
+						}
+						t.start(name)
+					}
 				}
 			}
 			for i := range events {
@@ -74,7 +105,7 @@ func (t *tail) start(stackName string) {
 
 				// action finished?
 				if aws.StringValue(latestEvent.PhysicalResourceId) == aws.StringValue(latestEvent.StackId) {
-					switch string(latestEvent.ResourceStatus) {
+					switch latestEvent.ResourceStatus {
 					case "CREATE_FAILED", "CREATE_COMPLETE", // create finished.
 						"ROLLBACK_FAILED", "ROLLBACK_COMPLETE", // rollback finished.
 						"DELETE_FAILED", "DELETE_COMPLETE", // delete finished.
