@@ -93,7 +93,9 @@ func (t *tail) start(ctx context.Context, stackName string) {
 		latestEvent := resp.StackEvents[0]
 
 		for {
-			time.Sleep(2*time.Second + time.Duration(rand.Float64()*float64(time.Second)))
+			if err := sleepWithContext(ctx, 2*time.Second+time.Duration(rand.Float64()*float64(time.Second))); err != nil {
+				return
+			}
 			events := make([]cloudformation.StackEvent, 0, 10)
 			req := t.cfn.DescribeStackEventsRequest(&cloudformation.DescribeStackEventsInput{
 				StackName: aws.String(stackName),
@@ -136,4 +138,15 @@ func (t *tail) start(ctx context.Context, stackName string) {
 			}
 		}
 	}()
+}
+
+func sleepWithContext(ctx context.Context, d time.Duration) error {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-t.C:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	return nil
 }
