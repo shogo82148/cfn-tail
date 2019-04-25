@@ -43,9 +43,6 @@ func (t *tail) Start(ctx context.Context, stackName string) {
 }
 
 func (t *tail) start(ctx context.Context, stackName string) {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
 	// canonical stack names to ARN
 	if !strings.HasPrefix(stackName, "arn:") {
 		req := t.cfn.DescribeStacksRequest(&cloudformation.DescribeStacksInput{
@@ -71,6 +68,9 @@ func (t *tail) start(ctx context.Context, stackName string) {
 
 	t.wg.Add(1)
 	go func() {
+		ctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+
 		defer func() {
 			t.mu.Lock()
 			delete(t.stacks, stackName)
