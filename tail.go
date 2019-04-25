@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"math/rand"
 	"strings"
@@ -33,20 +34,24 @@ func (t *tail) Events() <-chan cloudformation.StackEvent {
 	return t.ch
 }
 
-func (t *tail) Start(stackName string) {
-	t.start(stackName)
+func (t *tail) Start(ctx context.Context, stackName string) {
+	t.start(ctx, stackName)
 	go func() {
 		t.wg.Wait()
 		close(t.ch)
 	}()
 }
 
-func (t *tail) start(stackName string) {
+func (t *tail) start(ctx context.Context, stackName string) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	// canonical stack names to ARN
 	if !strings.HasPrefix(stackName, "arn:") {
 		req := t.cfn.DescribeStacksRequest(&cloudformation.DescribeStacksInput{
 			StackName: aws.String(stackName),
 		})
+		req.SetContext(ctx)
 		resp, err := req.Send()
 		if err != nil {
 			log.Println(err)
@@ -76,9 +81,13 @@ func (t *tail) start(stackName string) {
 		req := t.cfn.DescribeStackEventsRequest(&cloudformation.DescribeStackEventsInput{
 			StackName: aws.String(stackName),
 		})
+		req.SetContext(ctx)
 		resp, err := req.Send()
 		if err != nil {
-			log.Println(err)
+			// ignore canceling errors
+			if ctx.Err() == nil {
+				log.Println(err)
+			}
 			return
 		}
 		latestEvent := resp.StackEvents[0]
@@ -104,7 +113,7 @@ func (t *tail) start(stackName string) {
 							e.ResourceStatus == "UPDATE_IN_PROGRESS" ||
 							e.ResourceStatus == "DELETE_IN_PROGRESS") {
 						// follow nested stack
-						t.start(aws.StringValue(e.PhysicalResourceId))
+						t.start(ctx, aws.StringValue(e.PhysicalResourceId))
 					}
 				}
 			}

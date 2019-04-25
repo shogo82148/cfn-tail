@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -20,7 +21,7 @@ func main() {
 	}
 
 	t := newTail(cfg)
-	t.Start(os.Args[1])
+	t.Start(context.Background(), os.Args[1])
 	for e := range t.Events() {
 		fmt.Println(formatEvent(e))
 	}
