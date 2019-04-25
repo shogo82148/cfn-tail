@@ -71,6 +71,17 @@ func (t *tail) start(stackName string) {
 			}
 			if len(events) > 0 {
 				latestEvent = events[0]
+
+				// action finished?
+				if aws.StringValue(latestEvent.PhysicalResourceId) == aws.StringValue(latestEvent.StackId) {
+					switch string(latestEvent.ResourceStatus) {
+					case "CREATE_FAILED", "CREATE_COMPLETE", // create finished.
+						"ROLLBACK_FAILED", "ROLLBACK_COMPLETE", // rollback finished.
+						"DELETE_FAILED", "DELETE_COMPLETE", // delete finished.
+						"UPDATE_COMPLETE", "UPDATE_ROLLBACK_FAILED", "UPDATE_ROLLBACK_COMPLETE": // update finished.
+						return
+					}
+				}
 			}
 			time.Sleep(time.Second)
 		}
