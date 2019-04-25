@@ -84,7 +84,10 @@ func (t *tail) start(stackName string) {
 					}
 					events = append(events, e)
 
-					if aws.StringValue(e.ResourceType) == "AWS::CloudFormation::Stack" && e.ResourceStatus == "UPDATE_IN_PROGRESS" {
+					if aws.StringValue(e.ResourceType) == "AWS::CloudFormation::Stack" &&
+						(e.ResourceStatus == "CREATE_IN_PROGRESS" ||
+							e.ResourceStatus == "UPDATE_IN_PROGRESS" ||
+							e.ResourceStatus == "DELETE_IN_PROGRESS") {
 						// follow nested stack
 						name := aws.StringValue(e.PhysicalResourceId)
 						if idx := strings.LastIndexByte(name, ':'); idx >= 0 {
