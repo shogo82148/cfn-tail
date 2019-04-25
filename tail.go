@@ -3,7 +3,6 @@ package main
 import (
 	"log"
 	"math/rand"
-	"strings"
 	"sync"
 	"time"
 
