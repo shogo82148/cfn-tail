@@ -34,7 +34,7 @@ func formatEvent(event cloudformation.StackEvent) string {
 	columns := []column{
 		{
 			value: aws.TimeValue(event.Timestamp).Format(time.RFC3339),
-			width: 21,
+			width: 20,
 		},
 		{
 			color: yellow,
@@ -44,6 +44,11 @@ func formatEvent(event cloudformation.StackEvent) string {
 		{
 			color: yellow,
 			value: aws.StringValue(event.LogicalResourceId),
+			width: 20,
+		},
+		{
+			color: black | bright,
+			value: aws.StringValue(event.ResourceType),
 			width: 20,
 		},
 		{
@@ -64,6 +69,7 @@ func formatEvent(event cloudformation.StackEvent) string {
 			for i := 0; i < padding; i++ {
 				buf.WriteRune(' ')
 			}
+			buf.WriteString("  ")
 		}
 	}
 
