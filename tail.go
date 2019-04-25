@@ -91,14 +91,7 @@ func (t *tail) start(stackName string) {
 							e.ResourceStatus == "UPDATE_IN_PROGRESS" ||
 							e.ResourceStatus == "DELETE_IN_PROGRESS") {
 						// follow nested stack
-						name := aws.StringValue(e.PhysicalResourceId)
-						if idx := strings.LastIndexByte(name, ':'); idx >= 0 {
-							name = strings.TrimPrefix(name[idx:], ":stack/")
-						}
-						if idx := strings.LastIndexByte(name, '/'); idx >= 0 {
-							name = name[:idx]
-						}
-						t.start(name)
+						t.start(aws.StringValue(e.PhysicalResourceId))
 					}
 				}
 			}
