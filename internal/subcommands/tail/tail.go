@@ -214,8 +214,10 @@ func (t *tail) start(ctx context.Context, stackName string) {
 						(e.ResourceStatus == "CREATE_IN_PROGRESS" ||
 							e.ResourceStatus == "UPDATE_IN_PROGRESS" ||
 							e.ResourceStatus == "DELETE_IN_PROGRESS") {
-						// follow nested stack
-						t.start(ctx, aws.StringValue(e.PhysicalResourceId))
+						if aws.StringValue(e.PhysicalResourceId) != "" {
+							// follow nested stack
+							t.start(ctx, aws.StringValue(e.PhysicalResourceId))
+						}
 					}
 				}
 			}
