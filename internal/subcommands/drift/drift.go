@@ -6,6 +6,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/external"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
+	"github.com/aws/aws-sdk-go-v2/service/cloudformation/cloudformationiface"
 	"github.com/shogo82148/cfnutils/internal/subcommands/base"
 )
 
@@ -29,10 +30,6 @@ func init() {
 }
 
 func run(cmd *base.Command, args []string) {
-	detect(args)
-}
-
-func detect(stacks []string) {
 	cfg, err := external.LoadDefaultAWSConfig()
 	if err != nil {
 		log.Println(err)
@@ -41,6 +38,45 @@ func detect(stacks []string) {
 	}
 	cfn := cloudformation.New(cfg)
 
+	if flagAll {
+		stacks := []string{}
+		req := cfn.ListStacksRequest(&cloudformation.ListStacksInput{})
+		p := req.Paginate()
+		for p.Next() {
+			resp := p.CurrentPage()
+			for _, stack := range resp.StackSummaries {
+				stacks = append(stacks, aws.StringValue(stack.StackId))
+			}
+		}
+		if err := p.Err(); err != nil {
+			log.Println(err)
+			base.SetExitStatus(1)
+			base.Exit()
+		}
+		detect(cfn, stacks)
+		return
+	}
+
+	if flagRecursive {
+		stacks := make([]string, len(args))
+		copy(stacks, args)
+		for _, stack := range args {
+			children, err := getChildren(cfn, stack)
+			if err != nil {
+				log.Println(err)
+				base.SetExitStatus(1)
+				base.Exit()
+			}
+			stacks = append(stacks, children...)
+		}
+		detect(cfn, stacks)
+		return
+	}
+
+	detect(cfn, args)
+}
+
+func detect(cfn cloudformationiface.CloudFormationAPI, stacks []string) {
 	for _, stack := range stacks {
 		req := cfn.DetectStackDriftRequest(&cloudformation.DetectStackDriftInput{
 			StackName: aws.String(stack),
@@ -52,4 +88,33 @@ func detect(stacks []string) {
 		}
 		log.Println(aws.StringValue(resp.StackDriftDetectionId))
 	}
+}
+
+func getChildren(cfn cloudformationiface.CloudFormationAPI, stack string) ([]string, error) {
+	req := cfn.ListStackResourcesRequest(&cloudformation.ListStackResourcesInput{
+		StackName: aws.String(stack),
+	})
+	p := req.Paginate()
+	children := []string{}
+	for p.Next() {
+		resp := p.CurrentPage()
+		for _, rsc := range resp.StackResourceSummaries {
+			if aws.StringValue(rsc.ResourceType) != "AWS::CloudFormation::Stack" {
+				continue
+			}
+			children = append(children, aws.StringValue(rsc.PhysicalResourceId))
+		}
+	}
+	if err := p.Err(); err != nil {
+		return nil, err
+	}
+	grandchildren := []string{}
+	for _, stack := range children {
+		res, err := getChildren(cfn, stack)
+		if err != nil {
+			return nil, err
+		}
+		grandchildren = append(grandchildren, res...)
+	}
+	return append(children, grandchildren...), nil
 }
