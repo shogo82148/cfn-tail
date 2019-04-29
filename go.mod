@@ -1,4 +1,4 @@
-module github.com/shogo82148/cfn-tail
+module github.com/shogo82148/cfnutils
 
 go 1.12
 

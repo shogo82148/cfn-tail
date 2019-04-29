@@ -1,7 +1,8 @@
-package main
+package tail
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"math/rand"
 	"strings"
@@ -9,9 +10,107 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/external"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation/cloudformationiface"
+	"github.com/mattn/go-runewidth"
+	"github.com/shogo82148/cfnutils/internal/color"
+	"github.com/shogo82148/cfnutils/internal/subcommands/base"
 )
+
+// Tail tails the events of CloudForamtion Stack.
+var Tail = &base.Command{
+	UsageLine: "tail tail for CloudFormation events",
+}
+
+func init() {
+	Tail.Run = run
+}
+
+func run(cmd *base.Command, args []string) {
+	cfg, err := external.LoadDefaultAWSConfig()
+	if err != nil {
+		log.Println(err)
+		base.SetExitStatus(1)
+		base.Exit()
+	}
+	if len(args) < 1 {
+		log.Println("cfnutil tail STACK_NAME")
+		base.SetExitStatus(1)
+		base.Exit()
+	}
+
+	t := newTail(cfg)
+	t.Start(context.Background(), args[0])
+	for e := range t.Events() {
+		fmt.Println(formatEvent(e))
+	}
+}
+
+func formatEvent(event cloudformation.StackEvent) string {
+	type column struct {
+		color color.Color
+		value string
+		width int
+	}
+	columns := []column{
+		{
+			value: aws.TimeValue(event.Timestamp).Format(time.RFC3339),
+			width: 20,
+		},
+		{
+			color: color.Yellow,
+			value: aws.StringValue(event.StackName),
+			width: 20,
+		},
+		{
+			color: color.Yellow,
+			value: aws.StringValue(event.LogicalResourceId),
+			width: 20,
+		},
+		{
+			color: color.Black | color.Bright,
+			value: aws.StringValue(event.ResourceType),
+			width: 20,
+		},
+		{
+			color: statusColor(string(event.ResourceStatus)),
+			value: string(event.ResourceStatus),
+			width: 30,
+		},
+		{
+			value: aws.StringValue(event.ResourceStatusReason),
+		},
+	}
+
+	var buf strings.Builder
+	for _, c := range columns {
+		buf.WriteString(color.Colorize(c.value, c.color))
+		if c.width > 0 {
+			padding := c.width - runewidth.StringWidth(c.value)
+			for i := 0; i < padding; i++ {
+				buf.WriteRune(' ')
+			}
+			buf.WriteString("  ")
+		}
+	}
+
+	return buf.String()
+}
+
+func statusColor(status string) color.Color {
+	switch status {
+	case "CREATE_COMPLETE", "UPDATE_COMPLETE", "UPDATE_ROLLBACK_COMPLETE", "ROLLBACK_COMPLETE", "DELETE_COMPLETE":
+		// positive events
+		return color.Green
+	case "CREATE_FAILED", "DELETE_FAILED", "ROLLBACK_FAILED", "UPDATE_FAILED", "UPDATE_ROLLBACK_FAILED":
+		// negative events
+		return color.Red
+	case "CREATE_IN_PROGRESS", "DELETE_IN_PROGRESS", "UPDATE_IN_PROGRESS", "ROLLBACK_IN_PROGRESS", "UPDATE_COMPLETE_CLEANUP_IN_PROGRESS", "UPDATE_ROLLBACK_IN_PROGRESS", "UPDATE_ROLLBACK_COMPLETE_CLEANUP_IN_PROGRESS":
+		return color.Black | color.Bright
+	}
+	return 0
+}
 
 type tail struct {
 	cfn cloudformationiface.CloudFormationAPI

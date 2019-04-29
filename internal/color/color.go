@@ -1,29 +1,46 @@
-package main
+// Package color is basic color management package for terminal.
+package color
 
 import (
 	"strconv"
 	"strings"
 )
 
-// very basic color library
-type color uint16
+// Color is a color on the terminal.
+type Color uint16
 
 const (
-	// No color
-	noColor color = 1 << 15
+	// NoColor is no color.
+	NoColor Color = 1 << 15
 )
 
 const (
 	// Foreground colors for ColorScheme.
-	_ color = iota<<bitsForeground | noColor
-	black
-	red
-	green
-	yellow
-	blue
-	magenta
-	cyan
-	white
+	_ Color = iota<<bitsForeground | NoColor
+
+	// Black is black foreground color.
+	Black
+
+	// Red is red foreground color.
+	Red
+
+	// Green is green foreground color.
+	Green
+
+	// Yellow is yellow foreground color.
+	Yellow
+
+	// Blue is blue foreground color.
+	Blue
+
+	// Magenta is magenta foreground color.
+	Magenta
+
+	// Cyan is cyan foreground color.
+	Cyan
+
+	// White is white foreground color.
+	White
 
 	bitsForeground       = 0
 	maskForeground       = 0xf
@@ -32,15 +49,31 @@ const (
 
 const (
 	// Background colors for ColorScheme.
-	_ = iota<<bitsBackground | noColor
-	backgroundBlack
-	backgroundRed
-	backgroundGreen
-	backgroundYellow
-	backgroundBlue
-	backgroundMagenta
-	backgroundCyan
-	backgroundWhite
+	_ = iota<<bitsBackground | NoColor
+
+	// BackgroundBlack is black background color.
+	BackgroundBlack
+
+	// BackgroundRed is red background color.
+	BackgroundRed
+
+	// BackgroundGreen is green background color.
+	BackgroundGreen
+
+	// BackgroundYellow is yellow background color.
+	BackgroundYellow
+
+	// BackgroundBlue is blue background color.
+	BackgroundBlue
+
+	// BackgroundMagenta is magenta background color.
+	BackgroundMagenta
+
+	// BackgroundCyan is cyan background color.
+	BackgroundCyan
+
+	// BackgroundWhite is white background color.
+	BackgroundWhite
 
 	bitsBackground       = 4
 	maskBackground       = 0xf << bitsBackground
@@ -48,25 +81,26 @@ const (
 )
 
 const (
-	// Bold flag for ColorScheme.
-	bold     color = 1<<bitsBold | noColor
+	// Bold flag makes the font bold.
+	Bold     Color = 1<<bitsBold | NoColor
 	bitsBold       = 8
 	maskBold       = 1 << bitsBold
 
-	bright                     color = 1<<bitsBright | noColor
+	// Bright flag makes the foreground color bright.
+	Bright                     Color = 1<<bitsBright | NoColor
 	bitsBright                       = 9
 	maskBright                       = 1 << bitsBright
 	ansiBrightForegroundOffset       = 90 - 1
 
-	backgroundBright           color = 1<<bitsBackgroundBright | noColor
+	// BackgroundBright flag makes the background color bright.
+	BackgroundBright           Color = 1<<bitsBackgroundBright | NoColor
 	bitsBackgroundBright             = 10
 	maskBackgroundBright             = 1 << bitsBackgroundBright
 	ansiBrightBackgroundOffset       = 100 - 1
 )
 
-const ()
-
-func colorize(text string, color color) string {
+// Colorize colorizes the text.
+func Colorize(text string, color Color) string {
 	foreground := color & maskForeground >> bitsForeground
 	background := color & maskBackground >> bitsBackground
 	bold := color & maskBold
