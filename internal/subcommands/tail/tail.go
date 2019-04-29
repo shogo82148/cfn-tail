@@ -61,12 +61,12 @@ func formatEvent(event cloudformation.StackEvent) string {
 		},
 		{
 			color: color.Yellow,
-			value: aws.StringValue(event.StackName),
+			value: omitText(aws.StringValue(event.StackName), 20),
 			width: 20,
 		},
 		{
 			color: color.Yellow,
-			value: aws.StringValue(event.LogicalResourceId),
+			value: omitText(aws.StringValue(event.LogicalResourceId), 20),
 			width: 20,
 		},
 		{
@@ -97,6 +97,13 @@ func formatEvent(event cloudformation.StackEvent) string {
 	}
 
 	return buf.String()
+}
+
+func omitText(s string, length int) string {
+	if len(s) < length {
+		return s
+	}
+	return "..." + s[len(s)-(length-3):]
 }
 
 func statusColor(status string) color.Color {
