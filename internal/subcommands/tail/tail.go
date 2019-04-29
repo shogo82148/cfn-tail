@@ -20,7 +20,8 @@ import (
 
 // Tail tails the events of CloudForamtion Stack.
 var Tail = &base.Command{
-	UsageLine: "tail tail for CloudFormation events",
+	UsageLine: "tail stack-name",
+	Short: "tails the events of CloudForamtion Stack",
 }
 
 func init() {
