@@ -2,7 +2,9 @@ package drift
 
 import (
 	"log"
+	"math/rand"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -86,52 +88,57 @@ func run(cmd *base.Command, args []string) {
 }
 
 func detect(cfn cloudformationiface.CloudFormationAPI, stacks []string) {
-	// start to detect stack drift
-	detectionIDs := make([]string, 0, len(stacks))
+	var wg sync.WaitGroup
 	for _, stack := range stacks {
-		stack, err := canonicalStackName(cfn, stack)
-		if err != nil {
-			log.Println(err)
-			continue
-		}
-		log.Println("start to detect stack drift: ", stack)
-		req := cfn.DetectStackDriftRequest(&cloudformation.DetectStackDriftInput{
-			StackName: aws.String(stack),
+		stack := stack
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			detectStack(cfn, stack)
+		}()
+		time.Sleep(time.Second)
+	}
+	wg.Wait()
+}
+
+func detectStack(cfn cloudformationiface.CloudFormationAPI, stack string) {
+	stack, err := canonicalStackName(cfn, stack)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	log.Println("start to detect stack drift: ", stack)
+	req := cfn.DetectStackDriftRequest(&cloudformation.DetectStackDriftInput{
+		StackName: aws.String(stack),
+	})
+	resp, err := req.Send()
+	if err != nil {
+		log.Println("failed to detect stack drift: ", stack, " ,", err)
+		return
+	}
+	detectionID := aws.StringValue(resp.StackDriftDetectionId)
+
+	for {
+		time.Sleep(5*time.Second + time.Duration(rand.Float64()*float64(time.Second)))
+		req := cfn.DescribeStackDriftDetectionStatusRequest(&cloudformation.DescribeStackDriftDetectionStatusInput{
+			StackDriftDetectionId: aws.String(detectionID),
 		})
 		resp, err := req.Send()
 		if err != nil {
-			log.Println(err)
+			// try to next time
 			continue
 		}
-		detectionIDs = append(detectionIDs, aws.StringValue(resp.StackDriftDetectionId))
-	}
-
-	// wait for completing
-	for len(detectionIDs) > 0 {
-		time.Sleep(5 * time.Second)
-		inProgress := make([]string, 0, len(detectionIDs))
-		for _, id := range detectionIDs {
-			req := cfn.DescribeStackDriftDetectionStatusRequest(&cloudformation.DescribeStackDriftDetectionStatusInput{
-				StackDriftDetectionId: aws.String(id),
-			})
-			resp, err := req.Send()
-			if err != nil {
-				// try to next time
-				inProgress = append(inProgress, id)
-				continue
-			}
-			switch resp.DetectionStatus {
-			case cloudformation.StackDriftDetectionStatusDetectionComplete:
-				// detection complete, show the result
-				log.Printf("completed stack: %s, status: %s, drifted resource count: %d", aws.StringValue(resp.StackId), resp.StackDriftStatus, aws.Int64Value(resp.DriftedStackResourceCount))
-			case cloudformation.StackDriftDetectionStatusDetectionFailed:
-				// detection failed
-				log.Printf("failed stack:%s, reason:%s", aws.StringValue(resp.StackId), aws.StringValue(resp.DetectionStatusReason))
-			case cloudformation.StackDriftDetectionStatusDetectionInProgress:
-				inProgress = append(inProgress, id)
-			}
+		switch resp.DetectionStatus {
+		case cloudformation.StackDriftDetectionStatusDetectionComplete:
+			// detection complete, show the result
+			log.Printf("completed status: %s, stack: %s, drifted resource count: %d", resp.StackDriftStatus, aws.StringValue(resp.StackId), aws.Int64Value(resp.DriftedStackResourceCount))
+			return
+		case cloudformation.StackDriftDetectionStatusDetectionFailed:
+			// detection failed
+			log.Printf("failed stack:%s, reason:%s", aws.StringValue(resp.StackId), aws.StringValue(resp.DetectionStatusReason))
+			return
+		case cloudformation.StackDriftDetectionStatusDetectionInProgress:
 		}
-		detectionIDs = inProgress
 	}
 }
 
