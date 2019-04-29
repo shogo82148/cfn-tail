@@ -2,6 +2,8 @@ package drift
 
 import (
 	"log"
+	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/external"
@@ -84,7 +86,15 @@ func run(cmd *base.Command, args []string) {
 }
 
 func detect(cfn cloudformationiface.CloudFormationAPI, stacks []string) {
+	// start to detect stack drift
+	detectionIDs := make([]string, 0, len(stacks))
 	for _, stack := range stacks {
+		stack, err := canonicalStackName(cfn, stack)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		log.Println("start to detect stack drift: ", stack)
 		req := cfn.DetectStackDriftRequest(&cloudformation.DetectStackDriftInput{
 			StackName: aws.String(stack),
 		})
@@ -93,7 +103,35 @@ func detect(cfn cloudformationiface.CloudFormationAPI, stacks []string) {
 			log.Println(err)
 			continue
 		}
-		log.Println(aws.StringValue(resp.StackDriftDetectionId))
+		detectionIDs = append(detectionIDs, aws.StringValue(resp.StackDriftDetectionId))
+	}
+
+	// wait for completing
+	for len(detectionIDs) > 0 {
+		time.Sleep(5 * time.Second)
+		inProgress := make([]string, 0, len(detectionIDs))
+		for _, id := range detectionIDs {
+			req := cfn.DescribeStackDriftDetectionStatusRequest(&cloudformation.DescribeStackDriftDetectionStatusInput{
+				StackDriftDetectionId: aws.String(id),
+			})
+			resp, err := req.Send()
+			if err != nil {
+				// try to next time
+				inProgress = append(inProgress, id)
+				continue
+			}
+			switch resp.DetectionStatus {
+			case cloudformation.StackDriftDetectionStatusDetectionComplete:
+				// detection complete, show the result
+				log.Printf("completed stack: %s, status: %s, drifted resource count: %d", aws.StringValue(resp.StackId), resp.StackDriftStatus, aws.Int64Value(resp.DriftedStackResourceCount))
+			case cloudformation.StackDriftDetectionStatusDetectionFailed:
+				// detection failed
+				log.Printf("failed stack:%s, reason:%s", aws.StringValue(resp.StackId), aws.StringValue(resp.DetectionStatusReason))
+			case cloudformation.StackDriftDetectionStatusDetectionInProgress:
+				inProgress = append(inProgress, id)
+			}
+		}
+		detectionIDs = inProgress
 	}
 }
 
@@ -124,4 +162,18 @@ func getChildren(cfn cloudformationiface.CloudFormationAPI, stack string) ([]str
 		grandchildren = append(grandchildren, res...)
 	}
 	return append(children, grandchildren...), nil
+}
+
+func canonicalStackName(cfn cloudformationiface.CloudFormationAPI, stackName string) (string, error) {
+	if !strings.HasPrefix(stackName, "arn:") {
+		req := cfn.DescribeStacksRequest(&cloudformation.DescribeStacksInput{
+			StackName: aws.String(stackName),
+		})
+		resp, err := req.Send()
+		if err != nil {
+			return "", err
+		}
+		return aws.StringValue(resp.Stacks[0].StackId), nil
+	}
+	return stackName, nil
 }
