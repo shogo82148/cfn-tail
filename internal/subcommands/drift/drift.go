@@ -40,7 +40,14 @@ func run(cmd *base.Command, args []string) {
 
 	if flagAll {
 		stacks := []string{}
-		req := cfn.ListStacksRequest(&cloudformation.ListStacksInput{})
+		req := cfn.ListStacksRequest(&cloudformation.ListStacksInput{
+			StackStatusFilter: []cloudformation.StackStatus{
+				cloudformation.StackStatusCreateComplete,
+				cloudformation.StackStatusUpdateComplete,
+				cloudformation.StackStatusUpdateRollbackComplete,
+				cloudformation.StackStatusRollbackComplete,
+			},
+		})
 		p := req.Paginate()
 		for p.Next() {
 			resp := p.CurrentPage()
