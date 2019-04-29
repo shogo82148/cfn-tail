@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/shogo82148/cfnutils/internal/subcommands/base"
+	"github.com/shogo82148/cfnutils/internal/subcommands/drift"
 	"github.com/shogo82148/cfnutils/internal/subcommands/help"
 	"github.com/shogo82148/cfnutils/internal/subcommands/tail"
 )
@@ -13,6 +14,7 @@ import (
 func init() {
 	base.Commands = []*base.Command{
 		tail.Tail,
+		drift.Drift,
 	}
 }
 
@@ -37,7 +39,7 @@ func main() {
 			return
 		}
 	}
-	log.Fatal("unknown command:", args[0])
+	log.Fatal("unknown command: ", args[0])
 }
 
 func init() {
